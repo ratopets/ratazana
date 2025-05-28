@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard BI - Análise de Vendas</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 3px solid #667eea;
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .data-source {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .data-source label {
+            font-weight: bold;
+            color: #333;
+        }
+
+        select, input, button {
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        select:focus, input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        button {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+            min-width: 120px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        .kpi-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+            transition: transform 0.3s ease;
+        }
+
+        .kpi-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .kpi-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .kpi-label {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+
+        .chart-container {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+
+        .chart-title {
+            font-size: 1.3em;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #333;
+            text-align: center;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #667eea;
+            font-size: 1.2em;
+        }
+
+        .error {
+            background: #ff6b6b;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .sql-config {
+            display: none;
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+
+        .sql-config.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .form-group input {
+            width: 100%;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 100px;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Dashboard BI Interativo</h1>
+            <p>Análise de dados em tempo real com múltiplas fontes</p>
+        </div>
+
+        <div class="controls">
+            <div class="data-source">
+                <label>Fonte de Dados:</label>
+                <select id="dataSource">
+                    <option value="demo">Dados Demo</option>
+                    <option value="csv">Upload CSV</option>
+                    <option value="sheets">Google Sheets</option>
+                    <option value="sql">SQL Database</option>
+                </select>
+            </div>
+
+            <input type="file" id="csvFile" accept=".csv" style="display: none;">
+            <input type="text" id="sheetsUrl" placeholder="URL do Google Sheets" style="display: none;">
+            
+            <button id="loadData">Carregar Dados</button>
+            <button id="refreshData">Atualizar</button>
+        </div>
+
+        <div id="sqlConfig" class="sql-config">
+            <h3>Configuração SQL</h3>
+            <div class="form-group">
+                <label>URL do Banco:</label>
+                <input type="text" id="sqlUrl" placeholder="https://api.exemplo.com/query">
+            </div>
+            <div class="form-group">
+                <label>Query SQL:</label>
+                <textarea id="sqlQuery" placeholder="SELECT * FROM vendas WHERE data >= '2024-01-01'"></textarea>
+            </div>
+            <div class="form-group">
+                <label>Headers (JSON):</label>
+                <input type="text" id="sqlHeaders" placeholder='{"Authorization": "Bearer token", "Content-Type": "application/json"}'>
+            </div>
+        </div>
+
+        <div id="loading" class="loading" style="display: none;">
+            <p>⏳ Carregando dados...</p>
+        </div>
+
+        <div id="error" class="error" style="display: none;"></div>
+
+        <div id="kpiGrid" class="kpi-grid"></div>
+
+        <div id="chartsGrid" class="charts-grid">
+            <div class="chart-container">
+                <div class="chart-title">Vendas por Mês</div>
+                <canvas id="salesChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <div class="chart-title">Vendas por Categoria</div>
+                <canvas id="categoryChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <div class="chart-title">Top Vendedores</div>
+                <canvas id="sellersChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <div class="chart-title">Evolução Mensal</div>
+                <canvas id="trendChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Dados demo para exemplo
+        const demoData = [
+            {data: '2024-01-15', vendedor: 'João Silva', categoria: 'Eletrônicos', valor: 1200, quantidade: 2},
+            {data: '2024-01-20', vendedor: 'Maria Santos', categoria: 'Roupas', valor: 800, quantidade: 4},
+            {data: '2024-02-10', vendedor: 'João Silva', categoria: 'Eletrônicos', valor: 2500, quantidade: 1},
+            {data: '2024-02-15', vendedor: 'Pedro Costa', categoria: 'Casa', valor: 1500, quantidade: 3},
+            {data: '2024-03-05', vendedor: 'Maria Santos', categoria: 'Roupas', valor: 900, quantidade: 5},
+            {data: '2024-03-12', vendedor: 'Ana Oliveira', categoria: 'Eletrônicos', valor: 3200, quantidade: 2},
+            {data: '2024-04-08', vendedor: 'Pedro Costa', categoria: 'Casa', valor: 1800, quantidade: 4},
+            {data: '2024-04-18', vendedor: 'João Silva', categoria: 'Eletrônicos', valor: 1600, quantidade: 3},
+            {data: '2024-05-03', vendedor: 'Ana Oliveira', categoria: 'Roupas', valor: 1100, quantidade: 6},
+            {data: '2024-05-15', vendedor: 'Maria Santos', categoria: 'Casa', valor: 2200, quantidade: 2}
+        ];
+
+        let currentData = demoData;
+        let charts = {};
+
+        // Elementos DOM
+        const dataSourceSelect = document.getElementById('dataSource');
+        const csvFileInput = document.getElementById('csvFile');
+        const sheetsUrlInput = document.getElementById('sheetsUrl');
+        const sqlConfig = document.getElementById('sqlConfig');
+        const loadDataBtn = document.getElementById('loadData');
+        const refreshDataBtn = document.getElementById('refreshData');
+        const loading = document.getElementById('loading');
+        const errorDiv = document.getElementById('error');
+        const kpiGrid = document.getElementById('kpiGrid');
+
+        // Event listeners
+        dataSourceSelect.addEventListener('change', handleDataSourceChange);
+        loadDataBtn.addEventListener('click', loadData);
+        refreshDataBtn.addEventListener('click', refreshData);
+        csvFileInput.addEventListener('change', handleCSVUpload);
+
+        function handleDataSourceChange() {
+            const source = dataSourceSelect.value;
+            
+            // Esconder todos os inputs
+            csvFileInput.style.display = 'none';
+            sheetsUrlInput.style.display = 'none';
+            sqlConfig.classList.remove('active');
+            
+            // Mostrar input relevante
+            switch(source) {
+                case 'csv':
+                    csvFileInput.style.display = 'inline-block';
+                    break;
+                case 'sheets':
+                    sheetsUrlInput.style.display = 'inline-block';
+                    break;
+                case 'sql':
+                    sqlConfig.classList.add('active');
+                    break;
+            }
+        }
+
+        function showLoading() {
+            loading.style.display = 'block';
+            errorDiv.style.display = 'none';
+        }
+
+        function hideLoading() {
+            loading.style.display = 'none';
+        }
+
+        function showError(message) {
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            hideLoading();
+        }
+
+        async function loadData() {
+            const source = dataSourceSelect.value;
+            
+            try {
+                showLoading();
+                
+                switch(source) {
+                    case 'demo':
+                        currentData = demoData;
+                        break;
+                    case 'csv':
+                        if (!csvFileInput.files[0]) {
+                            throw new Error('Selecione um arquivo CSV');
+                        }
+                        await loadCSVData();
+                        break;
+                    case 'sheets':
+                        await loadSheetsData();
+                        break;
+                    case 'sql':
+                        await loadSQLData();
+                        break;
+                }
+                
+                updateDashboard();
+                hideLoading();
+                
+            } catch (error) {
+                showError('Erro ao carregar dados: ' + error.message);
+            }
+        }
+
+        async function loadCSVData() {
+            return new Promise((resolve, reject) => {
+                const file = csvFileInput.files[0];
+                Papa.parse(file, {
+                    header: true,
+                    skipEmptyLines: true,
+                    dynamicTyping: true,
+                    complete: function(results) {
+                        if (results.errors.length > 0) {
+                            reject(new Error('Erro ao processar CSV: ' + results.errors[0].message));
+                        } else {
+                            currentData = results.data;
+                            resolve();
+                        }
+                    },
+                    error: function(error) {
+                        reject(error);
+                    }
+                });
+            });
+        }
+
+        async function loadSheetsData() {
+            const url = sheetsUrlInput.value;
+            if (!url) {
+                throw new Error('Digite a URL do Google Sheets');
+            }
+            
+            // Converter URL do Google Sheets para CSV
+            const csvUrl = url.replace('/edit#gid=', '/export?format=csv&gid=')
+                             .replace('/edit', '/export?format=csv');
+            
+            try {
+                const response = await fetch(csvUrl);
+                if (!response.ok) {
+                    throw new Error('Erro ao acessar Google Sheets. Verifique se o documento é público.');
+                }
+                
+                const csvText = await response.text();
+                
+                return new Promise((resolve, reject) => {
+                    Papa.parse(csvText, {
+                        header: true,
+                        skipEmptyLines: true,
+                        dynamicTyping: true,
+                        complete: function(results) {
+                            currentData = results.data;
+                            resolve();
+                        },
+                        error: reject
+                    });
+                });
+            } catch (error) {
+                throw new Error('Erro ao carregar Google Sheets: ' + error.message);
+            }
+        }
+
+        async function loadSQLData() {
+            const url = document.getElementById('sqlUrl').value;
+            const query = document.getElementById('sqlQuery').value;
+            const headersText = document.getElementById('sqlHeaders').value;
+            
+            if (!url || !query) {
+                throw new Error('Configure a URL e a query SQL');
+            }
+            
+            let headers = {'Content-Type': 'application/json'};
+            if (headersText) {
+                try {
+                    headers = {...headers, ...JSON.parse(headersText)};
+                } catch (e) {
+                    throw new Error('Headers inválidos. Use formato JSON válido.');
+                }
+            }
+            
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({ query: query })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Erro HTTP: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                currentData = Array.isArray(data) ? data : data.data || data.results || [];
+                
+            } catch (error) {
+                throw new Error('Erro ao conectar com SQL: ' + error.message);
+            }
+        }
+
+        function refreshData() {
+            loadData();
+        }
+
+        function updateDashboard() {
+            if (!currentData || currentData.length === 0) {
+                showError('Nenhum dado disponível');
+                return;
+            }
+            
+            updateKPIs();
+            updateCharts();
+        }
+
+        function updateKPIs() {
+            const totalVendas = currentData.reduce((sum, item) => sum + (item.valor || 0), 0);
+            const totalQuantidade = currentData.reduce((sum, item) => sum + (item.quantidade || 0), 0);
+            const ticketMedio = totalVendas / currentData.length;
+            const vendedoresUnicos = new Set(currentData.map(item => item.vendedor)).size;
+            
+            const kpis = [
+                { label: 'Total de Vendas', value: 'R$ ' + totalVendas.toLocaleString('pt-BR') },
+                { label: 'Ticket Médio', value: 'R$ ' + ticketMedio.toFixed(2).replace('.', ',') },
+                { label: 'Qtd. Vendida', value: totalQuantidade.toLocaleString('pt-BR') },
+                { label: 'Vendedores', value: vendedoresUnicos }
+            ];
+            
+            kpiGrid.innerHTML = kpis.map(kpi => `
+                <div class="kpi-card">
+                    <div class="kpi-value">${kpi.value}</div>
+                    <div class="kpi-label">${kpi.label}</div>
+                </div>
+            `).join('');
+        }
+
+        function updateCharts() {
+            // Destruir gráficos existentes
+            Object.values(charts).forEach(chart => chart.destroy());
+            charts = {};
+            
+            // Vendas por mês
+            const salesByMonth = {};
+            currentData.forEach(item => {
+                const month = new Date(item.data).toLocaleDateString('pt-BR', {month: 'long', year: 'numeric'});
+                salesByMonth[month] = (salesByMonth[month] || 0) + item.valor;
+            });
+            
+            charts.sales = new Chart(document.getElementById('salesChart'), {
+                type: 'line',
+                data: {
+                    labels: Object.keys(salesByMonth),
+                    datasets: [{
+                        label: 'Vendas (R$)',
+                        data: Object.values(salesByMonth),
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+            
+            // Vendas por categoria
+            const salesByCategory = {};
+            currentData.forEach(item => {
+                salesByCategory[item.categoria] = (salesByCategory[item.categoria] || 0) + item.valor;
+            });
+            
+            charts.category = new Chart(document.getElementById('categoryChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(salesByCategory),
+                    datasets: [{
+                        data: Object.values(salesByCategory),
+                        backgroundColor: ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#4facfe']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    }
+                }
+            });
+            
+            // Top vendedores
+            const salesBySeller = {};
+            currentData.forEach(item => {
+                salesBySeller[item.vendedor] = (salesBySeller[item.vendedor] || 0) + item.valor;
+            });
+            
+            charts.sellers = new Chart(document.getElementById('sellersChart'), {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(salesBySeller),
+                    datasets: [{
+                        label: 'Vendas (R$)',
+                        data: Object.values(salesBySeller),
+                        backgroundColor: 'rgba(102, 126, 234, 0.8)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+            
+            // Evolução mensal
+            charts.trend = new Chart(document.getElementById('trendChart'), {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(salesByMonth),
+                    datasets: [{
+                        label: 'Vendas (R$)',
+                        data: Object.values(salesByMonth),
+                        backgroundColor: 'linear-gradient(45deg, #667eea, #764ba2)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        function handleCSVUpload() {
+            if (csvFileInput.files[0]) {
+                loadData();
+            }
+        }
+
+        // Inicializar dashboard
+        updateDashboard();
+    </script>
+</body>
+</html>
